@@ -1,0 +1,119 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // HELPER FUNCTIONS
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ENTITY VALIDATIONS
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'email', 'username', 'themeId', 'isPremium', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.email is string &&
+             data.email.size() <= 256 &&
+             data.username is string &&
+             data.username.size() >= 3 &&
+             data.username.size() <= 20 &&
+             data.username.matches('^[a-zA-Z0-9_]+$') &&
+             data.themeId is string &&
+             data.isPremium is bool &&
+             data.createdAt is string;
+    }
+
+    function isValidLink(data) {
+      return data.keys().hasAll(['id', 'title', 'url', 'order', 'isVisible', 'clickCount']) &&
+             data.id is string &&
+             data.id.size() <= 128 &&
+             data.title is string &&
+             data.title.size() <= 100 &&
+             data.url is string &&
+             data.url.size() <= 1000 &&
+             data.order is int &&
+             data.isVisible is bool &&
+             data.clickCount is int &&
+             (!data.keys().contains('type') || data.type in ['standard', 'social']) &&
+             (!data.keys().contains('platform') || data.platform is string);
+    }
+
+    function isValidAnalytics(data) {
+       return data.keys().hasAll(['timestamp', 'path', 'device']) &&
+              data.timestamp is string &&
+              data.path is string &&
+              data.path.size() <= 256 &&
+              data.device is string &&
+              data.device.size() <= 50;
+    }
+
+    // COLLECTIONS
+    match /users/{userId} {
+      allow get: if isValidId(userId); // Public profile access
+      allow list: if isSignedIn(); // Social/Search features
+
+      allow create: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().isPremium == false && // New users start free
+        incoming().createdAt is string
+      );
+
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Action: standard profile update
+        (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'bio', 'themeId', 'isPremium', 'socials'])) &&
+        incoming().createdAt == existing().createdAt && // Immutable field
+        incoming().username == existing().username && // Immutable field
+        incoming().userId == existing().userId // Immutable field
+      );
+
+      allow delete: if isOwner(userId);
+    }
+
+    match /users/{userId}/links/{linkId} {
+      allow read: if isValidId(userId) && isValidId(linkId);
+      
+      allow create: if isOwner(userId) && isValidId(linkId) && isValidLink(incoming()) && (
+        incoming().clickCount == 0 // New links start at 0
+      );
+      
+      allow update: if isOwner(userId) && isValidId(linkId) && isValidLink(incoming()) && (
+        incoming().id == existing().id // Immutable field
+      );
+      
+      allow delete: if isOwner(userId) && isValidId(linkId);
+    }
+
+    match /users/{userId}/analytics/{analyticsId} {
+      allow read: if isOwner(userId) && isValidId(analyticsId);
+      allow create: if isValidId(userId) && isValidAnalytics(incoming());
+    }
+
+    match /usernames/{username} {
+      allow get: if true; // Uniqueness check needs public access
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && (
+        incoming().keys().size() == 1 &&
+        incoming().userId is string
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+  }
+}

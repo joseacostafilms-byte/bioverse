@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and metadata",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "bio": { "type": "string" },
+        "themeId": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "username"]
+    },
+    "Link": {
+      "title": "Link",
+      "description": "Individual link in the bio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "icon": { "type": "string" },
+        "order": { "type": "integer" },
+        "isVisible": { "type": "boolean" },
+        "clickCount": { "type": "integer" }
+      },
+      "required": ["id", "title", "url", "order"]
+    },
+    "Analytics": {
+      "title": "Analytics",
+      "description": "Page view analytics",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "path": { "type": "string" },
+        "referrer": { "type": "string" },
+        "device": { "type": "string" },
+        "country": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Primary user documents"
+    },
+    "/users/{userId}/links/{linkId}": {
+      "schema": "Link",
+      "description": "User's collection of bio links"
+    },
+    "/users/{userId}/analytics/{analyticsId}": {
+      "schema": "Analytics",
+      "description": "Traffic analytics for the user's profile"
+    },
+    "/usernames/{username}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" }
+        }
+      },
+      "description": "Index for fast username lookups and uniqueness checks"
+    }
+  }
+}
