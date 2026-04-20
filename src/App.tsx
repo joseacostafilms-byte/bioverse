@@ -10,6 +10,7 @@ import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import UsernameSetup from './pages/UsernameSetup';
+import GoalSetup from './pages/GoalSetup';
 import PlanSetup from './pages/PlanSetup';
 
 interface AuthContextType {
@@ -98,6 +99,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/setup" element={<UsernameSetup />} />
+          <Route path="/setup/goal" element={<GoalSetup />} />
           <Route path="/setup/plan" element={<PlanSetup />} />
           <Route path="/admin" element={<Dashboard />} />
           <Route path="/:username" element={<Profile />} />

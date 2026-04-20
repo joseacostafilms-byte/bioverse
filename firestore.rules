@@ -54,8 +54,9 @@ service cloud.firestore {
              data.order is int &&
              data.isVisible is bool &&
              data.clickCount is int &&
-             (!data.keys().contains('type') || data.type in ['standard', 'social']) &&
-             (!data.keys().contains('platform') || data.platform is string);
+             (!data.keys().contains('type') || data.type in ['standard', 'social', 'course', 'calendar']) &&
+             (!data.keys().contains('platform') || data.platform is string) &&
+             (!data.keys().contains('price') || data.price is string);
     }
 
     function isValidAnalytics(data) {
@@ -70,7 +71,7 @@ service cloud.firestore {
     // COLLECTIONS
     match /users/{userId} {
       allow get: if isValidId(userId); // Public profile access
-      allow list: if isSignedIn(); // Social/Search features
+      allow list: if true; // Public access required to query by username for profile routing
 
       allow create: if isOwner(userId) && isValidUser(incoming()) && (
         incoming().isPremium == false && // New users start free
@@ -79,7 +80,7 @@ service cloud.firestore {
 
       allow update: if isOwner(userId) && isValidUser(incoming()) && (
         // Action: standard profile update
-        (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'bio', 'themeId', 'isPremium', 'socials'])) &&
+        (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'bio', 'themeId', 'isPremium', 'planId', 'socials', 'goal', 'headerLayout', 'customTheme'])) &&
         incoming().createdAt == existing().createdAt && // Immutable field
         incoming().username == existing().username && // Immutable field
         incoming().userId == existing().userId // Immutable field
@@ -89,15 +90,15 @@ service cloud.firestore {
     }
 
     match /users/{userId}/links/{linkId} {
-      allow read: if isValidId(userId) && isValidId(linkId);
+      allow read: if isValidId(userId);
       
       allow create: if isOwner(userId) && isValidId(linkId) && isValidLink(incoming()) && (
         incoming().clickCount == 0 // New links start at 0
       );
       
-      allow update: if isOwner(userId) && isValidId(linkId) && isValidLink(incoming()) && (
-        incoming().id == existing().id // Immutable field
-      );
+      allow update: if 
+        (isOwner(userId) && isValidId(linkId) && isValidLink(incoming()) && incoming().id == existing().id) ||
+        (isValidId(userId) && isValidId(linkId) && incoming().diff(existing()).affectedKeys().hasOnly(['clickCount']) && incoming().clickCount == existing().clickCount + 1);
       
       allow delete: if isOwner(userId) && isValidId(linkId);
     }

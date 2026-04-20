@@ -5,6 +5,7 @@ import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { Globe, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { isValidUsername } from '../lib/utils';
+import { t } from '../lib/i18n';
 
 // Background image URL for the duotone gradient
 const BG_IMAGE_URL = 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?q=80&w=2000&auto=format&fit=crop';
@@ -49,11 +50,12 @@ export default function UsernameSetup() {
         displayName: user.displayName || username,
         avatarUrl: user.photoURL || '',
         themeId: 'bioverse-dark',
+        headerLayout: 'standard', // Default layout
         isPremium: false,
         createdAt: new Date().toISOString()
       });
       await refreshProfile();
-      navigate('/setup/plan');
+      navigate('/setup/goal');
     } catch (err) {
       setError('Failed to create account. Please try again.');
       console.error(err);
@@ -72,8 +74,8 @@ export default function UsernameSetup() {
       <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-900/75 to-black/75 backdrop-blur-sm" />
 
       <div className="relative z-10 max-w-lg w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 md:p-12 text-center text-white shadow-2xl">
-        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4">Welcome to BioVerse!</h1>
-        <p className="text-gray-300 mb-10 text-lg">Choose your BioVerse username. You can always change it later.</p>
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4">{t('setup.username.title')}</h1>
+        <p className="text-gray-300 mb-10 text-lg">{t('setup.username.subtitle')}</p>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="relative group">
@@ -90,7 +92,7 @@ export default function UsernameSetup() {
                 else setStatus('idle');
               }}
               className="w-full bg-[#141414]/80 border-2 border-white/10 rounded-2xl py-5 pl-[140px] pr-6 focus:outline-none focus:border-emerald-500 transition-colors placeholder:text-gray-600 text-lg font-bold"
-              placeholder="username"
+              placeholder={t('setup.username.placeholder')}
               required
             />
             <div className="absolute right-6 top-1/2 -translate-y-1/2 font-bold uppercase text-[10px] tracking-widest">
@@ -107,16 +109,12 @@ export default function UsernameSetup() {
              </div>
           )}
 
-          <div className="text-xs text-gray-400 max-w-sm mx-auto">
-            By continuing, you agree to receive offers, news and updates from BioVerse
-          </div>
-
           <button
             type="submit"
             disabled={status !== 'available' || loading}
             className="w-full py-5 rounded-full bg-white text-black font-black text-lg hover:bg-emerald-400 hover:text-black hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:bg-white disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-xl"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Continue'}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('setup.username.cta')}
           </button>
         </form>
       </div>

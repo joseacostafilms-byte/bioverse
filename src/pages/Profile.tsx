@@ -42,9 +42,10 @@ export default function Profile() {
           setProfile(profileData);
 
           // Real-time links
-          const q = query(collection(db, 'users', userId, 'links'), where('isVisible', '==', true), orderBy('order', 'asc'));
+          const q = query(collection(db, 'users', userId, 'links'), orderBy('order', 'asc'));
           const unsubscribe = onSnapshot(q, (snapshot) => {
-            setLinks(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LinkItem)));
+            const allLinks = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LinkItem));
+            setLinks(allLinks.filter(l => l.isVisible));
           });
 
           // Log analytics
@@ -95,6 +96,7 @@ export default function Profile() {
   }
 
   const theme = THEMES.find(t => t.id === profile.themeId) || THEMES[0];
+  const custom = profile.customTheme || {};
 
   const trackClick = async (linkId: string) => {
     try {
@@ -105,9 +107,84 @@ export default function Profile() {
     }
   };
 
+  const getButtonShapeClass = (shape?: string) => {
+    switch (shape) {
+       case 'square': return 'rounded-none';
+       case 'rounder': return 'rounded-3xl';
+       case 'full': return 'rounded-full';
+       case 'round': default: return 'rounded-xl';
+    }
+  };
+
+  const getButtonShadowClass = (shadow?: string) => {
+    switch (shadow) {
+       case 'none': return 'shadow-none';
+       case 'soft': return 'shadow-sm';
+       case 'strong': return 'shadow-xl shadow-black/40';
+       case 'hard': return 'shadow-[4px_4px_0_0_rgba(0,0,0,1)] hover:translate-y-[2px] hover:translate-x-[2px] hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] transition-all';
+       default: return 'shadow-sm hover:shadow-xl';
+    }
+  };
+
+  const getButtonStyle = (isHover: boolean = false) => {
+    const style = custom.buttonStyle || 'solid';
+    const bgHex = custom.buttonColor || '#ffffff';
+    const textHex = custom.buttonTextColor || '#000000';
+    
+    if (style === 'solid') return { backgroundColor: bgHex, color: textHex, borderColor: bgHex };
+    if (style === 'outline') return { backgroundColor: 'transparent', color: bgHex, borderColor: bgHex, borderWidth: '2px' };
+    if (style === 'glass') return { backgroundColor: `${bgHex}20`, color: bgHex, backdropFilter: 'blur(10px)', borderColor: `${bgHex}40`, borderWidth: '1px' };
+    
+    return {};
+  };
+
+  const getPageStyle = () => {
+     const style: React.CSSProperties = {};
+     if (custom.pageFont) style.fontFamily = `"${custom.pageFont}", sans-serif`;
+     if (custom.pageTextColor) style.color = custom.pageTextColor;
+     
+     if (custom.wallpaperStyle === 'fill' && custom.backgroundColor) {
+        style.backgroundColor = custom.backgroundColor;
+     } else if (custom.wallpaperStyle === 'gradient') {
+        style.backgroundImage = `linear-gradient(to bottom right, ${custom.backgroundColor || '#202020'}, #000000)`;
+     }
+     
+     return style;
+  };
+
+  const isCustomBg = Object.keys(custom).length > 0 && !!custom.wallpaperStyle;
+  const customPageStyle = Object.keys(custom).length > 0 ? getPageStyle() : {};
+
   return (
-    <div className={`min-h-screen ${theme.bg} ${theme.text} ${theme.font} transition-colors duration-500`}>
-      <div className="max-w-xl mx-auto px-6 py-20 flex flex-col items-center">
+    <div 
+      className={cn(
+        "min-h-screen transition-colors duration-500",
+        !isCustomBg && theme.bg, 
+        !isCustomBg && theme.text, 
+        !custom.pageFont && theme.font,
+        profile.headerLayout === 'hero' && "pt-0"
+      )}
+      style={{ ...theme.customStyle, ...customPageStyle }}
+    >
+      {/* Hero Header Layout Background (if active) */}
+      {profile.headerLayout === 'hero' && (
+        <div className="w-full h-80 relative overflow-hidden mb-[-80px] z-0">
+           <img 
+              src={profile.avatarUrl} 
+              alt={profile.displayName} 
+              className="w-full h-full object-cover blur-2xl opacity-60 scale-110"
+              referrerPolicy="no-referrer"
+            />
+            {(!isCustomBg) && <div className={`absolute inset-0 bg-gradient-to-t from-${theme.bg.split('bg-')[1]} to-transparent`} />}
+            {(isCustomBg) && <div className={`absolute inset-0 bg-gradient-to-t`} style={{ backgroundImage: `linear-gradient(to top, ${custom.backgroundColor}, transparent)` }} />}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        </div>
+      )}
+
+      <div className={cn(
+        "max-w-xl mx-auto px-6 pb-20 flex flex-col items-center relative z-10",
+        profile.headerLayout === 'hero' ? 'pt-8' : 'py-20'
+      )}>
         {/* Profile Header */}
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
@@ -118,7 +195,10 @@ export default function Profile() {
             <img 
               src={profile.avatarUrl} 
               alt={profile.displayName} 
-              className="w-24 h-24 rounded-full border-4 border-white/10 mb-4 object-cover shadow-2xl mx-auto"
+              className={cn(
+                "rounded-full border-4 mb-4 object-cover shadow-2xl mx-auto z-10 relative",
+                profile.headerLayout === 'hero' ? "w-32 h-32 border-white/20" : "w-24 h-24 border-white/10"
+              )}
               referrerPolicy="no-referrer"
             />
             <div className="absolute inset-0 bg-emerald-500/20 rounded-full scale-0 group-hover:scale-110 transition-transform duration-500 blur-xl -z-10" />
@@ -154,6 +234,8 @@ export default function Profile() {
         <div className="w-full space-y-4">
           {links.map((link, i) => {
             const isSocial = link.type === 'social';
+            const isCourse = link.type === 'course';
+            const isCalendar = link.type === 'calendar';
             const platform = isSocial ? SOCIAL_PLATFORMS.find(p => p.id === link.platform) : null;
             
             return (
@@ -169,10 +251,16 @@ export default function Profile() {
                 whileTap={{ scale: 0.98 }}
                 onClick={() => trackClick(link.id)}
                 className={cn(
-                  "flex items-center justify-center gap-3 w-full p-4 rounded-xl font-bold tracking-tight transition-all duration-300 shadow-sm hover:shadow-xl",
-                  theme.card,
-                  isSocial && "border-2 border-emerald-500/20"
+                  "flex items-center justify-center gap-3 w-full p-4 font-bold tracking-tight transition-all duration-300",
+                  Object.keys(custom).length === 0 && theme.card,
+                  Object.keys(custom).length === 0 && "rounded-xl shadow-sm hover:shadow-xl",
+                  Object.keys(custom).length > 0 && getButtonShapeClass(custom.buttonRoundness),
+                  Object.keys(custom).length > 0 && getButtonShadowClass(custom.buttonShadow),
+                  isSocial && "border-2 border-emerald-500/20 text-emerald-100",
+                  isCourse && "border-2 border-purple-500/30 text-purple-100",
+                  isCalendar && "border-2 border-blue-500/30 text-blue-100"
                 )}
+                style={Object.keys(custom).length > 0 ? getButtonStyle() : {}}
               >
                 {isSocial && platform && (
                    <span className="text-emerald-500">
@@ -185,7 +273,16 @@ export default function Profile() {
                     {platform.id === 'tiktok' && <Music2 size={18} />}
                   </span>
                 )}
-                {link.title}
+                {isCourse && <span className="text-xl">🎓</span>}
+                {isCalendar && <span className="text-xl">📅</span>}
+                
+                <span className="flex-1 text-center truncate">{link.title}</span>
+                
+                {isCourse && link.price && (
+                  <span className="text-xs px-2 py-1 bg-black/40 rounded-md text-white font-mono shrink-0">
+                    {link.price}
+                  </span>
+                )}
               </motion.a>
             );
           })}

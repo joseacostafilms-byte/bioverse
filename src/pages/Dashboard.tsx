@@ -7,7 +7,8 @@ import { LinkItem, UserProfile, THEMES, SOCIAL_PLATFORMS } from '../types';
 import { 
   Plus, GripVertical, Trash2, ExternalLink, Settings, BarChart2, 
   Palette, LogOut, Loader2, Check, Layout, Save, Globe, Share2,
-  Instagram, Twitter, Facebook, Linkedin, Youtube, Github, Music2
+  Instagram, Twitter, Facebook, Linkedin, Youtube, Github, Music2,
+  Zap, Upload, Image as ImageIcon, Video
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -21,6 +22,8 @@ function SortableLink({ link, onUpdate, onDelete }: { key?: string, link: LinkIt
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : 0 };
 
   const IconComponent = () => {
+    if (link.type === 'course') return <span className="text-lg leading-none select-none">🎓</span>;
+    if (link.type === 'calendar') return <span className="text-lg leading-none select-none">📅</span>;
     if (link.type === 'social' && link.platform) {
       const platform = SOCIAL_PLATFORMS.find(p => p.id === link.platform);
       if (platform) {
@@ -48,7 +51,7 @@ function SortableLink({ link, onUpdate, onDelete }: { key?: string, link: LinkIt
         <GripVertical className="w-5 h-5" />
       </button>
 
-      <div className="p-2 bg-white/5 rounded-lg text-emerald-500">
+      <div className={`p-2 rounded-lg flex items-center justify-center w-10 h-10 shrink-0 ${link.type === 'course' ? 'bg-purple-500/10 text-purple-400' : link.type === 'calendar' ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-emerald-500'}`}>
         <IconComponent />
       </div>
       
@@ -59,7 +62,7 @@ function SortableLink({ link, onUpdate, onDelete }: { key?: string, link: LinkIt
             defaultValue={link.title}
             onBlur={(e) => onUpdate(link.id, { title: e.target.value })}
             className="flex-1 bg-transparent font-bold text-sm focus:outline-none placeholder:text-gray-700"
-            placeholder={link.type === 'social' ? 'Platform Name' : 'Link Title'}
+            placeholder={link.type === 'social' ? 'Platform Name' : link.type === 'course' ? 'Course Title' : link.type === 'calendar' ? 'Booking Title' : 'Link Title'}
           />
           {link.type === 'social' && (
             <select
@@ -82,13 +85,25 @@ function SortableLink({ link, onUpdate, onDelete }: { key?: string, link: LinkIt
               ))}
             </select>
           )}
+          {link.type === 'course' && (
+             <div className="flex items-center gap-1">
+               <span className="text-[10px] text-gray-500">$</span>
+               <input 
+                  type="text" 
+                  defaultValue={link.price}
+                  onBlur={(e) => onUpdate(link.id, { price: e.target.value })}
+                  className="w-12 bg-black/50 text-[10px] text-white border border-white/5 rounded px-1 py-0.5 focus:outline-none text-right font-mono font-bold"
+                  placeholder="Price"
+               />
+             </div>
+          )}
         </div>
         <input 
           type="text" 
           defaultValue={link.url}
           onBlur={(e) => onUpdate(link.id, { url: e.target.value })}
-          className="w-full bg-transparent text-xs text-gray-500 focus:outline-none"
-          placeholder={link.type === 'social' ? 'username or profile URL' : 'https://example.com'}
+          className="w-full bg-transparent text-xs focus:outline-none text-gray-500 focus:text-white transition-colors"
+          placeholder={link.type === 'social' ? 'username or profile URL' : link.type === 'calendar' ? 'e.g. cal.com/username' : link.type === 'course' ? 'Checkout URL' : 'https://example.com'}
         />
       </div>
 
@@ -123,7 +138,10 @@ export default function Dashboard() {
   const [profileForm, setProfileForm] = useState({
     displayName: '',
     bio: '',
-    socials: {} as Record<string, string>
+    avatarUrl: '',
+    socials: {} as Record<string, string>,
+    headerLayout: 'standard' as 'standard' | 'hero',
+    customTheme: {} as any
   });
 
   useEffect(() => {
@@ -131,7 +149,10 @@ export default function Dashboard() {
       setProfileForm({
         displayName: profile.displayName || '',
         bio: profile.bio || '',
-        socials: profile.socials || {}
+        avatarUrl: profile.avatarUrl || '',
+        socials: profile.socials || {},
+        headerLayout: profile.headerLayout || 'standard',
+        customTheme: profile.customTheme || {}
       });
     }
   }, [profile]);
@@ -143,7 +164,10 @@ export default function Dashboard() {
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: profileForm.displayName,
         bio: profileForm.bio,
-        socials: profileForm.socials
+        avatarUrl: profileForm.avatarUrl,
+        socials: profileForm.socials,
+        headerLayout: profileForm.headerLayout,
+        customTheme: profileForm.customTheme
       });
     } catch (err) {
       console.error(err);
@@ -198,20 +222,83 @@ export default function Dashboard() {
     });
   }, [user]);
 
-  const addLink = async (type: 'standard' | 'social' = 'standard') => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('File too large. Max 2MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 256;
+        const MAX_HEIGHT = 256;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        setProfileForm(prev => ({ ...prev, avatarUrl: dataUrl }));
+      };
+      if (event.target?.result) {
+        img.src = event.target.result as string;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const addLink = async (type: 'standard' | 'social' | 'course' | 'calendar' = 'standard') => {
     if (!user) return;
     setIsAdding(true);
     try {
       const newLinkRef = doc(collection(db, 'users', user.uid, 'links'));
-      await setDoc(newLinkRef, {
+      
+      let title = 'New Link';
+      if (type === 'social') title = 'New Social Link';
+      if (type === 'course') title = 'New Course';
+      if (type === 'calendar') title = 'New Booking';
+
+      const linkData: any = {
         id: newLinkRef.id,
-        title: type === 'social' ? 'New Social Link' : 'New Link',
+        title,
         url: '',
         isVisible: true,
         order: links.length,
         clickCount: 0,
         type: type
-      });
+      };
+
+      if (type === 'course') {
+        linkData.price = '$99';
+        linkData.platform = 'kajabi';
+      }
+      if (type === 'calendar') {
+        linkData.platform = 'cal';
+        linkData.url = 'https://cal.com/your-username';
+      }
+
+      await setDoc(newLinkRef, linkData);
     } finally {
       setIsAdding(false);
     }
@@ -304,7 +391,18 @@ export default function Dashboard() {
           <div className="flex justify-between items-end">
              <div>
                 <h2 className="text-3xl font-black tracking-tight uppercase">{activeTab}</h2>
-                <p className="text-gray-500 text-sm">bioverse.app/{profile.username}</p>
+                <div className="flex items-center gap-4 mt-1">
+                  <p className="text-gray-500 text-sm">bioverse.app/{profile.username}</p>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`https://bioverse.app/${profile.username}`);
+                      alert('Link copied to clipboard!');
+                    }}
+                    className="text-[10px] uppercase font-bold text-gray-500 border border-gray-800 px-2 py-1 rounded hover:text-white hover:border-gray-500 transition-all"
+                  >
+                    Copy Link
+                  </button>
+                </div>
              </div>
              <a 
               href={`/${profile.username}`} 
@@ -315,6 +413,15 @@ export default function Dashboard() {
              </a>
           </div>
 
+          {!profile.isPremium && (
+            <div className="bg-gradient-to-r from-gray-900 to-black border border-white/10 p-6 rounded-2xl flex items-center justify-between shadow-2xl">
+              <h3 className="text-white font-bold text-lg">Elevate your design with better themes and styles.</h3>
+              <button onClick={() => navigate('/setup/plan')} className="px-6 py-2 bg-emerald-500 text-black font-bold text-sm rounded-full flex items-center gap-2 hover:bg-emerald-400 transition-colors whitespace-nowrap">
+                <Zap className="w-4 h-4 fill-current" /> Upgrade
+              </button>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             {activeTab === 'links' && (
               <motion.div 
@@ -324,22 +431,38 @@ export default function Dashboard() {
                 exit={{ opacity: 0, x: 10 }}
                 className="space-y-6"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <button 
                     onClick={() => addLink('standard')}
                     disabled={isAdding}
-                    className="py-4 bg-emerald-500 text-black font-bold flex items-center justify-center gap-3 hover:bg-emerald-400 transition-all rounded-xl shadow-lg shadow-emerald-500/10"
+                    className="py-4 bg-emerald-500 text-black text-xs font-bold flex flex-col items-center justify-center gap-2 hover:bg-emerald-400 transition-all rounded-xl shadow-lg shadow-emerald-500/10"
                   >
                     {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                    ADD LINK
+                    STANDARD
                   </button>
                   <button 
                     onClick={() => addLink('social')}
                     disabled={isAdding}
-                    className="py-4 bg-white text-black font-bold flex items-center justify-center gap-3 hover:bg-white/90 transition-all rounded-xl shadow-lg"
+                    className="py-4 bg-white/10 text-white text-xs font-bold flex flex-col items-center justify-center gap-2 hover:bg-white/20 transition-all rounded-xl shadow-lg"
                   >
                     {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : <Share2 className="w-5 h-5" />}
-                    SOCIAL LINK
+                    SOCIAL
+                  </button>
+                  <button 
+                    onClick={() => addLink('course')}
+                    disabled={isAdding}
+                    className="py-4 bg-purple-500/20 text-purple-400 border border-purple-500/30 text-xs font-bold flex flex-col items-center justify-center gap-2 hover:bg-purple-500/30 transition-all rounded-xl shadow-lg"
+                  >
+                    {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : <div className="text-xl">🎓</div>}
+                    COURSE
+                  </button>
+                  <button 
+                    onClick={() => addLink('calendar')}
+                    disabled={isAdding}
+                    className="py-4 bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold flex flex-col items-center justify-center gap-2 hover:bg-blue-500/30 transition-all rounded-xl shadow-lg"
+                  >
+                    {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : <div className="text-xl">📅</div>}
+                    CALENDAR
                   </button>
                 </div>
 
@@ -379,6 +502,19 @@ export default function Dashboard() {
                 {/* Profile Section */}
                 <section className="space-y-4">
                    <h3 className="text-xs font-mono text-emerald-500 uppercase tracking-widest font-bold">Profile Info</h3>
+                   
+                   {/* Profile Image Edit */}
+                   <div className="flex items-center gap-4 p-4 border border-white/5 bg-white/5 rounded-xl">
+                      <img src={profileForm.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&h=256'} referrerPolicy="no-referrer" className="w-16 h-16 rounded-full object-cover bg-gray-800" />
+                      <div>
+                        <label className="cursor-pointer px-4 py-2 bg-white/10 hover:bg-white/20 transition-colors text-white font-bold text-xs rounded-full inline-flex items-center gap-2">
+                           <Upload className="w-4 h-4" /> Edit Image
+                           <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        </label>
+                        <p className="text-[10px] text-gray-500 mt-2">Recommended: 256x256px.</p>
+                      </div>
+                   </div>
+
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] text-gray-500 uppercase font-bold">Display Name</label>
@@ -398,6 +534,26 @@ export default function Dashboard() {
                           className="w-full bg-[#141414] border border-white/5 rounded-lg p-3 text-sm focus:outline-none focus:border-emerald-500/30"
                         />
                       </div>
+                   </div>
+
+                   {/* Header Layout Form */}
+                   <h3 className="text-xs font-mono text-emerald-500 uppercase tracking-widest font-bold mt-8">Header Layout</h3>
+                   <div className="grid grid-cols-2 gap-4">
+                     <button
+                       onClick={() => setProfileForm({ ...profileForm, headerLayout: 'standard' })}
+                       className={`p-4 rounded-xl border-2 text-left ${profileForm.headerLayout === 'standard' ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                     >
+                       <div className="w-10 h-10 rounded-full bg-gray-500 mb-2 mx-auto" />
+                       <p className="text-xs font-bold text-center">Standard</p>
+                     </button>
+                     <button
+                       onClick={() => setProfileForm({ ...profileForm, headerLayout: 'hero' })}
+                       className={`p-4 rounded-xl border-2 text-left relative overflow-hidden ${profileForm.headerLayout === 'hero' ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                     >
+                       <div className="absolute top-0 left-0 w-full h-1/2 bg-gray-500 opacity-20 blur-md" />
+                       <div className="w-10 h-10 rounded-full bg-gray-500 mb-2 mx-auto relative z-10" />
+                       <p className="text-xs font-bold text-center relative z-10">Hero Header</p>
+                     </button>
                    </div>
 
                    {/* Social Links Form */}
@@ -432,26 +588,165 @@ export default function Dashboard() {
                 </section>
 
                 {/* Theme Selector */}
-                <section className="space-y-4">
-                  <h3 className="text-xs font-mono text-emerald-500 uppercase tracking-widest font-bold">Visual Themes</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {THEMES.map(theme => (
-                      <button
-                        key={theme.id}
-                        onClick={() => updateProfile({ themeId: theme.id })}
-                        className={`group relative overflow-hidden rounded-xl border-2 transition-all p-4 text-left active:scale-95 ${profile.themeId === theme.id ? 'border-emerald-500 ring-4 ring-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
-                      >
-                         <div className={`w-full aspect-video rounded-lg mb-3 flex items-center justify-center transition-transform group-hover:scale-105 ${theme.bg}`}>
-                            <div className={`w-1/2 h-1/2 rounded shadow-xl ${theme.card}`} />
-                         </div>
-                         <p className="text-xs font-bold uppercase tracking-tight">{theme.name}</p>
-                         {profile.themeId === theme.id && (
-                           <div className="absolute top-2 right-2 bg-emerald-500 p-1 rounded-full">
-                              <Check className="w-3 h-3 text-black" />
-                           </div>
-                         )}
-                      </button>
-                    ))}
+                <section className="space-y-8">
+                  {['Glass', 'Flat', 'Gradient', 'Abstract'].map(category => (
+                    <div key={category} className="space-y-4">
+                      <h3 className="text-xs font-mono text-emerald-500 uppercase tracking-widest font-bold">{category} Themes</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {THEMES.filter(t => t.category === category).map(theme => (
+                          <button
+                            key={theme.id}
+                            onClick={() => updateProfile({ themeId: theme.id })}
+                            className={`group relative overflow-hidden rounded-xl border-2 transition-all p-4 text-left active:scale-95 ${profile.themeId === theme.id ? 'border-emerald-500 ring-4 ring-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                          >
+                             <div 
+                               className={`w-full aspect-video rounded-lg mb-3 flex items-center justify-center transition-transform group-hover:scale-105 ${theme.bg}`}
+                               style={theme.customStyle}
+                             >
+                                <div className={`w-1/2 h-1/2 rounded shadow-xl ${theme.card}`} />
+                             </div>
+                             <p className="text-xs font-bold uppercase tracking-tight">{theme.name}</p>
+                             {profile.themeId === theme.id && (
+                               <div className="absolute top-2 right-2 bg-emerald-500 p-1 rounded-full z-10 shadow-lg">
+                                  <Check className="w-3 h-3 text-black" />
+                               </div>
+                             )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </section>
+
+                {/* Customization Settings */}
+                <section className="space-y-8 bg-black/40 border-t border-white/5 pt-12 pb-8">
+                  <div>
+                    <h3 className="text-xl font-bold uppercase tracking-tight mb-2">Detailed Customization <span className="text-[10px] bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded ml-2">PRO</span></h3>
+                    <p className="text-gray-500 text-sm">Fine-tune every aspect of your profile's design.</p>
+                  </div>
+                  
+                  {/* Button Style */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Button Style</h4>
+                     <div className="grid grid-cols-3 gap-4">
+                        {['solid', 'glass', 'outline'].map(style => (
+                          <button 
+                            key={style}
+                            onClick={() => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, buttonStyle: style as any } }))}
+                            className={`py-4 rounded-xl border-2 capitalize font-medium text-xs transition-all ${profileForm.customTheme?.buttonStyle === style ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                          >
+                             {style}
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+
+                  {/* Corner Roundness */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Corner Roundness</h4>
+                     <div className="grid grid-cols-4 gap-4">
+                        {['square', 'round', 'rounder', 'full'].map(shape => (
+                          <button 
+                            key={shape}
+                            onClick={() => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, buttonRoundness: shape as any } }))}
+                            className={`py-4 rounded-xl border-2 capitalize font-medium text-xs transition-all ${profileForm.customTheme?.buttonRoundness === shape ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                          >
+                             {shape}
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+
+                  {/* Button Shadow */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Button Shadow</h4>
+                     <div className="grid grid-cols-4 gap-4">
+                        {['none', 'soft', 'strong', 'hard'].map(shadow => (
+                          <button 
+                            key={shadow}
+                            onClick={() => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, buttonShadow: shadow as any } }))}
+                            className={`py-4 rounded-xl border-2 capitalize font-medium text-xs transition-all ${profileForm.customTheme?.buttonShadow === shadow ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                          >
+                             {shadow}
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+
+                  {/* Colors */}
+                  <div className="grid grid-cols-2 gap-6">
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Button Color</label>
+                       <input 
+                         type="color" 
+                         value={profileForm.customTheme?.buttonColor || '#ffffff'}
+                         onChange={(e) => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, buttonColor: e.target.value } }))}
+                         className="w-full h-12 bg-transparent rounded cursor-pointer"
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Button Text Color</label>
+                       <input 
+                         type="color" 
+                         value={profileForm.customTheme?.buttonTextColor || '#000000'}
+                         onChange={(e) => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, buttonTextColor: e.target.value } }))}
+                         className="w-full h-12 bg-transparent rounded cursor-pointer"
+                       />
+                     </div>
+                  </div>
+
+                  {/* Fonts */}
+                  <div className="grid grid-cols-2 gap-6">
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Page Font</label>
+                       <select 
+                         value={profileForm.customTheme?.pageFont || 'Inter'}
+                         onChange={(e) => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, pageFont: e.target.value } }))}
+                         className="w-full bg-[#141414] border border-white/10 rounded-lg p-3 outline-none text-sm text-gray-300"
+                       >
+                         <option value="Inter">Inter</option>
+                         <option value="Epilogue">Epilogue</option>
+                         <option value="Space Grotesk">Space Grotesk</option>
+                       </select>
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Page Text Color</label>
+                       <input 
+                         type="color" 
+                         value={profileForm.customTheme?.pageTextColor || '#ffffff'}
+                         onChange={(e) => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, pageTextColor: e.target.value } }))}
+                         className="w-full h-12 bg-transparent rounded cursor-pointer"
+                       />
+                     </div>
+                  </div>
+
+                  {/* Wallpaper Style */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Wallpaper Style</h4>
+                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        {['fill', 'gradient', 'blur', 'pattern', 'image', 'video'].map(bg => (
+                          <button 
+                            key={bg}
+                            onClick={() => setProfileForm(p => ({ ...p, customTheme: { ...p.customTheme, wallpaperStyle: bg as any } }))}
+                            className={`py-6 rounded-xl border-2 capitalize font-medium text-[10px] transition-all flex flex-col items-center justify-center gap-2 ${profileForm.customTheme?.wallpaperStyle === bg ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : 'border-white/5 hover:border-white/20'}`}
+                          >
+                             {bg === 'image' && <ImageIcon className="w-5 h-5" />}
+                             {bg === 'video' && <Video className="w-5 h-5" />}
+                             {(bg !== 'image' && bg !== 'video') && <Palette className="w-5 h-5" />}
+                             {bg}
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+                  
+                  <div className="pt-4">
+                     <button
+                       onClick={handleSaveProfile}
+                       disabled={saving}
+                       className="py-3 px-8 bg-purple-600 text-white font-bold uppercase text-xs tracking-widest rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 w-full"
+                     >
+                       {saving ? 'Saving...' : 'Apply Details & Custom Styling'}
+                     </button>
                   </div>
                 </section>
               </motion.div>
@@ -498,9 +793,38 @@ export default function Dashboard() {
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#222] rounded-b-2xl z-20" />
           
           {/* Preview Content */}
-          <div className={`w-full h-full overflow-y-auto scrollbar-hide flex flex-col items-center p-6 ${THEMES.find(t => t.id === profile.themeId)?.bg || 'bg-black'} ${THEMES.find(t => t.id === profile.themeId)?.text || 'text-white'} ${THEMES.find(t => t.id === profile.themeId)?.font || 'font-sans'}`}>
-            <div className="mt-8 text-center w-full">
-              <img src={profile.avatarUrl} className="w-16 h-16 rounded-full mx-auto border-2 border-white/10 mb-3 object-cover" referrerPolicy="no-referrer" />
+          <div 
+            className={cn(
+              "w-full h-full overflow-y-auto scrollbar-hide flex flex-col items-center relative",
+              THEMES.find(t => t.id === profile.themeId)?.bg || 'bg-black',
+              THEMES.find(t => t.id === profile.themeId)?.text || 'text-white',
+              THEMES.find(t => t.id === profile.themeId)?.font || 'font-sans'
+            )}
+            style={THEMES.find(t => t.id === profile.themeId)?.customStyle}
+          >
+            {/* Hero Header Layout Background */}
+            {profile.headerLayout === 'hero' && (
+              <div className="w-full h-40 absolute top-0 left-0 overflow-hidden z-0">
+                <img 
+                  src={profile.avatarUrl} 
+                  alt="" 
+                  className="w-full h-full object-cover blur-xl opacity-60 scale-125"
+                  referrerPolicy="no-referrer"
+                />
+                <div className={`absolute inset-0 bg-gradient-to-t from-${(THEMES.find(t => t.id === profile.themeId)?.bg || 'bg-black').split('bg-')[1] || 'black'} to-transparent`} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              </div>
+            )}
+
+            <div className={cn("text-center w-full relative z-10 px-6", profile.headerLayout === 'hero' ? 'mt-12' : 'mt-14')}>
+              <img 
+                src={profile.avatarUrl} 
+                className={cn(
+                  "rounded-full mx-auto mb-3 object-cover shadow-xl", 
+                  profile.headerLayout === 'hero' ? 'w-20 h-20 border-2 border-white/20' : 'w-16 h-16 border-2 border-white/10'
+                )} 
+                referrerPolicy="no-referrer" 
+              />
               <h4 className="text-sm font-bold truncate">{profile.displayName}</h4>
               <p className="text-[10px] opacity-60 truncate">@{profile.username}</p>
               
@@ -527,9 +851,11 @@ export default function Dashboard() {
               )}
             </div>
             
-            <div className="w-full mt-6 space-y-2">
+            <div className="w-full mt-6 space-y-2 px-6 relative z-10">
               {links.filter(l => l.isVisible).map(link => {
                 const isSocial = link.type === 'social';
+                const isCourse = link.type === 'course';
+                const isCalendar = link.type === 'calendar';
                 const platform = isSocial ? SOCIAL_PLATFORMS.find(p => p.id === link.platform) : null;
                 
                 return (
@@ -538,7 +864,9 @@ export default function Dashboard() {
                     className={cn(
                       "w-full p-2.5 rounded-lg text-center text-[10px] font-bold shadow-sm flex items-center justify-center gap-2",
                       THEMES.find(t => t.id === profile.themeId)?.card || 'bg-white/10',
-                      isSocial && "border-2 border-emerald-500/20"
+                      isSocial && "border-2 border-emerald-500/20",
+                      isCourse && "border-2 border-purple-500/30",
+                      isCalendar && "border-2 border-blue-500/30"
                     )}
                   >
                     {isSocial && platform && (
@@ -552,7 +880,10 @@ export default function Dashboard() {
                         {platform.id === 'tiktok' && <Music2 size={12} />}
                       </span>
                     )}
-                    {link.title || 'Untitled Link'}
+                    {isCourse && <span className="text-[12px]">🎓</span>}
+                    {isCalendar && <span className="text-[12px]">📅</span>}
+                    <span className="flex-1 text-center truncate">{link.title || 'Untitled Link'}</span>
+                    {isCourse && link.price && <span className="text-[9px] px-1.5 py-0.5 bg-black/30 rounded text-white font-mono">{link.price}</span>}
                   </div>
                 );
               })}

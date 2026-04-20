@@ -1,13 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
-import { Check, Star, Bell, Shield, ArrowRight } from 'lucide-react';
+import { Check, Star, Zap, Shield, ArrowRight } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { t } from '../lib/i18n';
 
 export default function PlanSetup() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | 'business'>('basic');
 
   useEffect(() => {
     if (!user || !profile) navigate('/');
@@ -18,11 +20,12 @@ export default function PlanSetup() {
     navigate('/admin');
   };
 
-  const handleStartProTrial = async () => {
+  const handleUpgrade = async () => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid), {
-        isPremium: true
+        isPremium: true,
+        planId: selectedPlan
       });
       navigate('/admin');
     } catch (err) {
@@ -31,77 +34,91 @@ export default function PlanSetup() {
     }
   };
 
+  const plans = [
+    {
+      id: 'basic',
+      name: 'Basic',
+      price: '$3',
+      features: ['Unlimited Links', 'Core Themes', 'Basic Analytics'],
+      icon: <Star className="w-5 h-5 text-amber-500" />
+    },
+    {
+      id: 'pro',
+      name: 'Pro',
+      price: '$10',
+      popular: true,
+      features: ['All Basic Features', 'Custom Themes', 'Advanced Analytics', 'Remove Branding'],
+      icon: <Zap className="w-5 h-5 text-emerald-500" />
+    },
+    {
+      id: 'business',
+      name: 'Business',
+      price: '$15',
+      features: ['All Pro Features', 'Course Integration', 'Calendar Booking', 'Team Access'],
+      icon: <Shield className="w-5 h-5 text-purple-500" />
+    }
+  ];
+
   return (
-    <div className="min-h-screen bg-white text-black flex items-center justify-center py-12 px-6">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <span className="font-bold text-xl tracking-tight">BioVerse</span>
-            <span className="text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-widest">Pro</span>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4 leading-tight">
-            Claim a free 7-day Pro trial
+    <div className="min-h-screen bg-[#FAFAFA] text-black py-12 px-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
+            {t('setup.plan.title')}
           </h1>
-          <p className="text-gray-500 text-sm">
-            Start with the full power of BioVerse!
+          <p className="text-gray-500 text-lg">
+            Choose the perfect plan to grow your audience and monetize your content.
           </p>
         </div>
 
-        <div className="relative pl-6 mb-12">
-          {/* Timeline Line */}
-          <div className="absolute left-10 top-8 bottom-8 w-px bg-gray-200" />
-          
-          <div className="space-y-8">
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-fuchsia-600 flex items-center justify-center shrink-0 z-10 text-white">
-                <Star className="w-5 h-5 fill-current" />
-              </div>
-              <div className="pt-2">
-                <h3 className="font-bold">Today</h3>
-                <p className="text-gray-500 text-sm mt-1">Get started with the world's most trusted link in bio, <span className="underline cursor-pointer">cancel any time</span>.</p>
-              </div>
+        <div className="grid md:grid-cols-3 gap-6 mb-12">
+          {plans.map(plan => (
+            <div 
+              key={plan.id}
+              onClick={() => setSelectedPlan(plan.id as any)}
+              className={`relative bg-white rounded-3xl p-6 cursor-pointer border-2 transition-all ${selectedPlan === plan.id ? 'border-black ring-4 ring-black/5 shadow-xl' : 'border-gray-200 hover:border-black/30'}`}
+            >
+               {plan.popular && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">
+                    Most Popular
+                  </div>
+               )}
+               <div className="flex justify-between items-center mb-6">
+                 {plan.icon}
+                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPlan === plan.id ? 'border-black bg-black' : 'border-gray-300'}`}>
+                   {selectedPlan === plan.id && <div className="w-2 h-2 rounded-full bg-white" />}
+                 </div>
+               </div>
+               <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+               <div className="flex items-baseline gap-1 mb-6">
+                 <span className="text-4xl font-black">{plan.price}</span>
+                 <span className="text-gray-500">/mo</span>
+               </div>
+               <ul className="space-y-3">
+                 {plan.features.map((feature, i) => (
+                   <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                     <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                     {feature}
+                   </li>
+                 ))}
+               </ul>
             </div>
-
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center shrink-0 z-10 text-white">
-                <Bell className="w-5 h-5" />
-              </div>
-              <div className="pt-2">
-                <h3 className="font-bold">In 5 days</h3>
-                <p className="text-gray-500 text-sm mt-1">We'll send you a reminder email that your trial is ending soon.</p>
-              </div>
-            </div>
-
-            <div className="relative flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center shrink-0 z-10 text-white">
-                <Shield className="w-5 h-5" />
-              </div>
-              <div className="pt-2">
-                <h3 className="font-bold">In 7 days</h3>
-                <p className="text-gray-500 text-sm mt-1">Your plan starts, unless you cancelled during the trial.</p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        <div className="text-center space-y-6">
-          <div className="flex items-center justify-center gap-1 text-amber-500 mb-2">
-            {[1,2,3,4,5].map(i => <Star key={i} className="w-5 h-5 fill-current" />)}
-          </div>
-          <p className="text-gray-500 text-sm">Trusted by 70M+ creators</p>
-
+        <div className="max-w-md mx-auto text-center space-y-4">
           <button 
-            onClick={handleStartProTrial}
-            className="w-full py-4 rounded-full bg-purple-600 text-white font-bold hover:bg-purple-700 transition-colors"
+            onClick={handleUpgrade}
+            className="w-full py-4 rounded-full bg-black text-white font-bold text-lg hover:bg-gray-800 transition-colors shadow-xl hover:scale-[1.02] active:scale-[0.98]"
           >
-            Continue with free trial
+            Upgrade to {plans.find(p => p.id === selectedPlan)?.name}
           </button>
           
           <button 
             onClick={handleContinueWithFree}
             className="w-full py-4 text-gray-500 font-medium hover:text-black transition-colors"
           >
-            No thanks, start with Free plan
+            {t('setup.plan.free')}
           </button>
         </div>
       </div>
